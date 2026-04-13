@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 class="section-title">Nastavení systému</h2>
+
+<div class="alarm-list">
+    <div class="alarm-card">
+        <div class="alarm-card-header">
+            <div class="alarm-name">1. SUDO PMSET</div>
+            <div class="alarm-train" style="background:{{ '#2DC653' if checks.pmset else '#D62828' }};color:#fff;">
+                {{ 'OK' if checks.pmset else 'CHYBÍ' }}
+            </div>
+        </div>
+        {% if not checks.pmset %}
+        <div class="stats-bar" style="margin-top:12px;">
+            Spusť v terminálu:<br>
+            <code style="font-family:'JetBrains Mono',monospace;background:#000;color:#2DC653;padding:8px 12px;display:block;margin-top:8px;white-space:pre;">echo "$USER ALL=(ALL) NOPASSWD: /usr/bin/pmset" | sudo tee /etc/sudoers.d/budik</code>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="alarm-card">
+        <div class="alarm-card-header">
+            <div class="alarm-name">2. ZVUK BUDÍKU (static/alarm.wav)</div>
+            <div class="alarm-train" style="background:{{ '#2DC653' if checks.alarm_sound else '#D62828' }};color:#fff;">
+                {{ 'OK' if checks.alarm_sound else 'CHYBÍ' }}
+            </div>
+        </div>
+        {% if not checks.alarm_sound %}
+        <div class="stats-bar" style="margin-top:12px;">
+            Přidej soubor <strong>alarm.wav</strong> do složky <strong>static/</strong>.
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="alarm-card">
+        <div class="alarm-name">3. LAUNCHD (autostart po restartu)</div>
+        <div class="stats-bar" style="margin-top:12px;">
+            <em>Bude doplněno v dalším kroku.</em>
+        </div>
+    </div>
+</div>
+{% endblock %}

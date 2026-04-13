@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BASED BUDÍK</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="header">
+        <h1><a href="{{ url_for('dashboard') }}" style="text-decoration:none;color:inherit;">// BASED BUDÍK</a></h1>
+        <div class="header-status">SYSTÉM ONLINE</div>
+    </div>
+    <nav class="tab-bar">
+        <a href="{{ url_for('dashboard') }}" class="tab {{ 'active' if active_tab == 'alarms' }}">Budíky</a>
+        <a href="{{ url_for('alarm_new') }}" class="tab {{ 'active' if active_tab == 'new' }}">+ Nový</a>
+        <a href="{{ url_for('setup_page') }}" class="tab {{ 'active' if active_tab == 'setup' }}">Nastavení</a>
+    </nav>
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>

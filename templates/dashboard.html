@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+    <h2 class="section-title">Budíky</h2>
+    <a href="{{ url_for('alarm_new') }}" class="btn btn-primary">+ Nový budík</a>
+</div>
+
+{% if not alarms %}
+<div class="empty-state">
+    <p>Žádné budíky</p>
+    <a href="{{ url_for('alarm_new') }}" class="btn btn-primary">Vytvořit první budík</a>
+</div>
+{% else %}
+<div class="alarm-list">
+    {% for alarm in alarms %}
+    <div class="alarm-card {{ 'inactive' if not alarm.is_active }}">
+        <div class="alarm-card-header">
+            <div>
+                {% if alarm.name %}
+                <div class="alarm-name">{{ alarm.name }}</div>
+                {% endif %}
+                <div class="alarm-time">{{ alarm.base_wake_time }}</div>
+                <div class="alarm-safe-time">FAILSAFE: {{ alarm.safe_wake_time }}</div>
+            </div>
+            <div style="text-align:right;">
+                <span class="alarm-train">{{ alarm.train_number }}</span>
+                <div class="alarm-route">{{ alarm.departure_station }} &rarr; {{ alarm.arrival_station }}</div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:13px;margin-top:4px;">
+                    Odjezd: {{ alarm.scheduled_departure }} | Příprava: {{ alarm.prep_minutes }} min | Tolerance: {{ alarm.delay_tolerance_minutes }} min
+                </div>
+            </div>
+        </div>
+
+        <div class="alarm-days">
+            {% set day_names = ['Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne'] %}
+            {% for i in range(1, 8) %}
+            <div class="day-badge {{ 'active' if i in alarm.days_of_week }}">{{ day_names[i-1] }}</div>
+            {% endfor %}
+        </div>
+
+        {% if alarm.stats and alarm.stats.total_checks > 0 %}
+        <div class="stats-bar">
+            <strong>STATISTIKY (14 DNÍ):</strong>
+            {{ alarm.stats.total_checks }} měření |
+            Průměr: {{ alarm.stats.avg_delay }} min |
+            Max: {{ alarm.stats.max_delay }} min |
+            <span class="stats-highlight">Zpoždění &gt;5 min: {{ alarm.stats.pct_over_5 }}%</span> |
+            <span class="stats-highlight">Zpoždění &gt;10 min: {{ alarm.stats.pct_over_10 }}%</span>
+        </div>
+        {% else %}
+        <div class="stats-bar">
+            <strong>STATISTIKY:</strong> Zatím žádná data
+        </div>
+        {% endif %}
+
+        <div class="alarm-actions">
+            <a href="{{ url_for('alarm_edit', alarm_id=alarm.id) }}" class="btn btn-sm">Upravit</a>
+            <form method="POST" action="{{ url_for('alarm_toggle', alarm_id=alarm.id) }}" style="display:inline;">
+                <button type="submit" class="btn btn-sm">
+                    {{ 'Zapnout' if not alarm.is_active else 'Vypnout' }}
+                </button>
+            </form>
+            <form method="POST" action="{{ url_for('alarm_delete', alarm_id=alarm.id) }}" style="display:inline;"
+                  onsubmit="return confirm('Opravdu smazat?')">
+                <button type="submit" class="btn btn-sm btn-danger">Smazat</button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

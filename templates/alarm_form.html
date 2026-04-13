@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 class="section-title">{{ 'Upravit budík' if alarm else 'Nový budík' }}</h2>
+
+<form method="POST" style="margin-top:24px;">
+    <div class="form-group">
+        <label>Název (volitelné)</label>
+        <input type="text" name="name" value="{{ alarm.name or '' if alarm else '' }}" placeholder="např. Ranní do práce">
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label>Číslo vlaku</label>
+            <input type="text" name="train_number" value="{{ alarm.train_number if alarm else '' }}" placeholder="např. R 931" required>
+        </div>
+        <div class="form-group">
+            <label>Čas odjezdu</label>
+            <input type="time" name="scheduled_departure" value="{{ alarm.scheduled_departure if alarm else '' }}" required>
+        </div>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label>Odjezdová stanice</label>
+            <input type="text" name="departure_station" value="{{ alarm.departure_station if alarm else '' }}" placeholder="např. Brno hl.n." required>
+        </div>
+        <div class="form-group">
+            <label>Cílová stanice</label>
+            <input type="text" name="arrival_station" value="{{ alarm.arrival_station if alarm else '' }}" placeholder="např. Praha hl.n." required>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label>Čas buzení</label>
+        <input type="time" name="base_wake_time" value="{{ alarm.base_wake_time if alarm else '' }}" required>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:12px;margin-top:6px;opacity:0.6;">
+            Failsafe se nastaví automaticky na {{ config.FAILSAFE_OFFSET_MINUTES }} min dříve (config.py)
+        </div>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label>Čas na přípravu (minuty)</label>
+            <input type="number" name="prep_minutes" value="{{ alarm.prep_minutes if alarm else 30 }}" min="1" max="120" required>
+        </div>
+        <div class="form-group">
+            <label>Tolerované zpoždění (minuty)</label>
+            <input type="number" name="delay_tolerance_minutes" value="{{ alarm.delay_tolerance_minutes if alarm else 5 }}" min="0" max="60" required>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:12px;margin-top:6px;opacity:0.6;">
+                Při větším zpoždění zavoníš dříve (failsafe)
+            </div>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label>Dny v týdnu</label>
+        <div class="day-selector">
+            {% set day_names = ['Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne'] %}
+            {% set active_days = alarm.days_of_week if alarm else [1,2,3,4,5] %}
+            {% for i in range(1, 8) %}
+            <label>
+                <input type="checkbox" name="days_of_week" value="{{ i }}" {{ 'checked' if i in active_days }}>
+                <span class="day-check">{{ day_names[i-1] }}</span>
+            </label>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div style="display:flex;gap:12px;margin-top:32px;">
+        <button type="submit" class="btn btn-primary">{{ 'Uložit změny' if alarm else 'Vytvořit budík' }}</button>
+        <a href="{{ url_for('dashboard') }}" class="btn">Zrušit</a>
+    </div>
+</form>
+{% endblock %}
