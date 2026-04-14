@@ -1,8 +1,7 @@
-"""Based Budik - SQLite database operations"""
+"""Based Budik - SQLite databázové operace"""
 
 import json
 import sqlite3
-from datetime import datetime
 
 import config
 
@@ -26,8 +25,8 @@ def init_db():
             scheduled_departure TEXT NOT NULL,
             base_wake_time TEXT NOT NULL,
             safe_wake_time TEXT NOT NULL,
-            prep_minutes INTEGER NOT NULL DEFAULT 30,
-            delay_tolerance_minutes INTEGER NOT NULL DEFAULT 5,
+            check_before_minutes INTEGER NOT NULL DEFAULT 5,
+            delay_tolerance_minutes INTEGER NOT NULL DEFAULT 0,
             days_of_week TEXT NOT NULL DEFAULT '[1,2,3,4,5]',
             is_active INTEGER NOT NULL DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -46,15 +45,31 @@ def init_db():
             FOREIGN KEY (alarm_id) REFERENCES alarms(id) ON DELETE CASCADE
         );
     """)
+    # Migrace pro existující DB – přidá sloupce pokud chybí
+    _migrate(conn)
     conn.commit()
     conn.close()
+
+
+def _migrate(conn):
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(alarms)")}
+    migrations = {
+        "check_before_minutes": "ALTER TABLE alarms ADD COLUMN check_before_minutes INTEGER NOT NULL DEFAULT 5",
+        "delay_tolerance_minutes": "ALTER TABLE alarms ADD COLUMN delay_tolerance_minutes INTEGER NOT NULL DEFAULT 0",
+    }
+    # Odstraníme prep_minutes ze schématu (SQLite neumí DROP COLUMN před verzí 3.35,
+    # sloupec zůstane ale nebude se používat)
+    for col, sql in migrations.items():
+        if col not in existing:
+            conn.execute(sql)
 
 
 # --- Alarms CRUD ---
 
 def create_alarm(train_number, departure_station, arrival_station,
                  scheduled_departure, base_wake_time, safe_wake_time,
-                 prep_minutes=30, delay_tolerance_minutes=5, days_of_week=None, name=None):
+                 check_before_minutes=5, delay_tolerance_minutes=0,
+                 days_of_week=None, name=None):
     if days_of_week is None:
         days_of_week = [1, 2, 3, 4, 5]
     conn = get_connection()
@@ -62,11 +77,11 @@ def create_alarm(train_number, departure_station, arrival_station,
         """INSERT INTO alarms
            (name, train_number, departure_station, arrival_station,
             scheduled_departure, base_wake_time, safe_wake_time,
-            prep_minutes, delay_tolerance_minutes, days_of_week)
+            check_before_minutes, delay_tolerance_minutes, days_of_week)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (name, train_number, departure_station, arrival_station,
          scheduled_departure, base_wake_time, safe_wake_time,
-         prep_minutes, delay_tolerance_minutes, json.dumps(days_of_week))
+         check_before_minutes, delay_tolerance_minutes, json.dumps(days_of_week))
     )
     alarm_id = cursor.lastrowid
     conn.commit()
@@ -78,9 +93,7 @@ def get_alarm(alarm_id):
     conn = get_connection()
     row = conn.execute("SELECT * FROM alarms WHERE id = ?", (alarm_id,)).fetchone()
     conn.close()
-    if row:
-        return _row_to_alarm(row)
-    return None
+    return _row_to_alarm(row) if row else None
 
 
 def get_all_alarms():
@@ -144,45 +157,43 @@ def record_delay(alarm_id, train_number, scheduled_departure,
     conn.close()
 
 
+def get_last_check(alarm_id):
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM delay_history WHERE alarm_id = ? ORDER BY check_time DESC LIMIT 1",
+        (alarm_id,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
 def get_delay_stats(train_number, days=14):
-    """Get delay statistics for a train over the last N days."""
     conn = get_connection()
     rows = conn.execute(
-        """SELECT actual_delay_min, api_success
-           FROM delay_history
-           WHERE train_number = ?
-             AND api_success = 1
+        """SELECT actual_delay_min FROM delay_history
+           WHERE train_number = ? AND api_success = 1
              AND check_time >= datetime('now', ?)
            ORDER BY check_time DESC""",
         (train_number, f"-{days} days")
     ).fetchall()
     conn.close()
 
-    if not rows:
-        return {"total_checks": 0, "avg_delay": 0, "max_delay": 0,
-                "delay_over_5": 0, "delay_over_10": 0, "pct_over_5": 0, "pct_over_10": 0}
-
     delays = [r["actual_delay_min"] for r in rows if r["actual_delay_min"] is not None]
     total = len(delays)
     if total == 0:
-        return {"total_checks": len(rows), "avg_delay": 0, "max_delay": 0,
-                "delay_over_5": 0, "delay_over_10": 0, "pct_over_5": 0, "pct_over_10": 0}
+        return {"total_checks": 0, "avg_delay": 0, "max_delay": 0,
+                "pct_over_5": 0, "pct_over_10": 0}
 
     over_5 = sum(1 for d in delays if d > 5)
     over_10 = sum(1 for d in delays if d > 10)
-
     return {
         "total_checks": total,
         "avg_delay": round(sum(delays) / total, 1),
         "max_delay": max(delays),
-        "delay_over_5": over_5,
-        "delay_over_10": over_10,
         "pct_over_5": round(over_5 / total * 100),
         "pct_over_10": round(over_10 / total * 100),
     }
 
-
-# --- Helpers ---
 
 def _row_to_alarm(row):
     d = dict(row)

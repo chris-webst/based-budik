@@ -1,18 +1,11 @@
-"""Based Budik - Flask application"""
-
-from datetime import datetime, timedelta
+"""Based Budik - Flask aplikace"""
 
 from flask import Flask, render_template, request, redirect, url_for
 
+import alarm_logic
+import api_handler
 import config
 import database
-
-
-def compute_safe_wake_time(base_wake_time: str) -> str:
-    """Vypočítá failsafe čas jako base_wake_time - FAILSAFE_OFFSET_MINUTES."""
-    t = datetime.strptime(base_wake_time, "%H:%M")
-    safe = t - timedelta(minutes=config.FAILSAFE_OFFSET_MINUTES)
-    return safe.strftime("%H:%M")
 
 app = Flask(__name__)
 app.secret_key = config.SECRET_KEY
@@ -33,9 +26,12 @@ def ensure_db():
 @app.route("/")
 def dashboard():
     alarms = database.get_all_alarms()
-    # Attach delay stats to each alarm
     for alarm in alarms:
         alarm["stats"] = database.get_delay_stats(alarm["train_number"])
+        alarm["last_check"] = database.get_last_check(alarm["id"])
+        alarm["check_time"] = alarm_logic.compute_check_time(
+            alarm["safe_wake_time"], alarm["check_before_minutes"]
+        )
     return render_template("dashboard.html", alarms=alarms, active_tab="alarms")
 
 
@@ -46,19 +42,19 @@ def alarm_new():
     if request.method == "POST":
         days = request.form.getlist("days_of_week")
         days = [int(d) for d in days] if days else [1, 2, 3, 4, 5]
-        base_wake_time = request.form["base_wake_time"]
-        database.create_alarm(
+        alarm_id = database.create_alarm(
             train_number=request.form["train_number"],
             departure_station=request.form["departure_station"],
             arrival_station=request.form["arrival_station"],
             scheduled_departure=request.form["scheduled_departure"],
-            base_wake_time=base_wake_time,
-            safe_wake_time=compute_safe_wake_time(base_wake_time),
-            prep_minutes=int(request.form.get("prep_minutes", 30)),
-            delay_tolerance_minutes=int(request.form.get("delay_tolerance_minutes", 5)),
+            base_wake_time=request.form["base_wake_time"],
+            safe_wake_time=request.form["safe_wake_time"],
+            check_before_minutes=int(request.form.get("check_before_minutes", 5)),
+            delay_tolerance_minutes=int(request.form.get("delay_tolerance_minutes", 0)),
             days_of_week=days,
             name=request.form.get("name") or None,
         )
+        _auto_check_if_needed(alarm_id)
         return redirect(url_for("dashboard"))
     return render_template("alarm_form.html", alarm=None, active_tab="new")
 
@@ -71,7 +67,6 @@ def alarm_edit(alarm_id):
     if request.method == "POST":
         days = request.form.getlist("days_of_week")
         days = [int(d) for d in days] if days else [1, 2, 3, 4, 5]
-        base_wake_time = request.form["base_wake_time"]
         database.update_alarm(
             alarm_id,
             name=request.form.get("name") or None,
@@ -79,12 +74,13 @@ def alarm_edit(alarm_id):
             departure_station=request.form["departure_station"],
             arrival_station=request.form["arrival_station"],
             scheduled_departure=request.form["scheduled_departure"],
-            base_wake_time=base_wake_time,
-            safe_wake_time=compute_safe_wake_time(base_wake_time),
-            prep_minutes=int(request.form.get("prep_minutes", 30)),
-            delay_tolerance_minutes=int(request.form.get("delay_tolerance_minutes", 5)),
+            base_wake_time=request.form["base_wake_time"],
+            safe_wake_time=request.form["safe_wake_time"],
+            check_before_minutes=int(request.form.get("check_before_minutes", 5)),
+            delay_tolerance_minutes=int(request.form.get("delay_tolerance_minutes", 0)),
             days_of_week=days,
         )
+        _auto_check_if_needed(alarm_id)
         return redirect(url_for("dashboard"))
     return render_template("alarm_form.html", alarm=alarm, active_tab="alarms")
 
@@ -101,7 +97,59 @@ def alarm_toggle(alarm_id):
     return redirect(url_for("dashboard"))
 
 
-# --- Setup ---
+# --- Manuální / automatická kontrola zpoždění ---
+
+@app.route("/alarm/<int:alarm_id>/check", methods=["POST"])
+def alarm_check(alarm_id):
+    use_failsafe = _run_check(alarm_id)
+    alarm = database.get_alarm(alarm_id)
+    if alarm:
+        import macos_util
+        if use_failsafe:
+            macos_util.notify("Based Budík – dřívější spoj",
+                              f"Vstáváš v {alarm['safe_wake_time']} – API selhalo nebo velké zpoždění")
+        else:
+            macos_util.notify("Based Budík – vše v pořádku",
+                              f"Vlak jede dobře, vstáváš v {alarm['base_wake_time']}")
+        # Zvuk NE – zavoní scheduler přesně v čase buzení
+    return redirect(url_for("dashboard"))
+
+
+def _auto_check_if_needed(alarm_id: int):
+    """Spustí kontrolu okamžitě pokud jsme v okně check_time..base_wake_time."""
+    alarm = database.get_alarm(alarm_id)
+    if alarm and alarm_logic.should_auto_check_now(alarm):
+        _run_check(alarm_id)
+
+
+def _run_check(alarm_id: int) -> bool:
+    """
+    Provede kontrolu zpoždění a uloží výsledek.
+    Vrací True = použij failsafe, False = standard.
+    """
+    alarm = database.get_alarm(alarm_id)
+    if not alarm:
+        return True
+
+    delay_min, api_success, api_source = api_handler.get_delay(
+        alarm["train_number"], alarm["departure_station"]
+    )
+    use_failsafe = alarm_logic.should_use_failsafe(
+        delay_min, api_success, alarm["delay_tolerance_minutes"]
+    )
+    database.record_delay(
+        alarm_id=alarm_id,
+        train_number=alarm["train_number"],
+        scheduled_departure=alarm["scheduled_departure"],
+        actual_delay_min=delay_min,
+        api_source=api_source,
+        api_success=api_success,
+        failsafe_triggered=use_failsafe,
+    )
+    return use_failsafe
+
+
+# --- Nastavení ---
 
 @app.route("/setup")
 def setup_page():

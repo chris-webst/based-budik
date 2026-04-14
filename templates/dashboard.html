@@ -21,13 +21,16 @@
                 <div class="alarm-name">{{ alarm.name }}</div>
                 {% endif %}
                 <div class="alarm-time">{{ alarm.base_wake_time }}</div>
-                <div class="alarm-safe-time">FAILSAFE: {{ alarm.safe_wake_time }}</div>
+                <div class="alarm-safe-time">Dřívější: {{ alarm.safe_wake_time }}</div>
             </div>
             <div style="text-align:right;">
                 <span class="alarm-train">{{ alarm.train_number }}</span>
-                <div class="alarm-route">{{ alarm.departure_station }} &rarr; {{ alarm.arrival_station }}</div>
+                <div class="alarm-route">{{ alarm.departure_station }} → {{ alarm.arrival_station }}</div>
                 <div style="font-family:'JetBrains Mono',monospace;font-size:13px;margin-top:4px;">
-                    Odjezd: {{ alarm.scheduled_departure }} | Příprava: {{ alarm.prep_minutes }} min | Tolerance: {{ alarm.delay_tolerance_minutes }} min
+                    Odjezd: {{ alarm.scheduled_departure }} | Tolerance: {{ alarm.delay_tolerance_minutes }} min
+                </div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:13px;margin-top:2px;">
+                    Kontrola: {{ alarm.check_time }} ({{ alarm.check_before_minutes }} min před dřívějším)
                 </div>
             </div>
         </div>
@@ -39,23 +42,39 @@
             {% endfor %}
         </div>
 
+        {% if alarm.last_check %}
+        <div class="stats-bar" style="margin-top:12px;">
+            <strong>POSLEDNÍ CHECK:</strong>
+            {% if alarm.last_check.api_success %}
+                Zpoždění {{ alarm.last_check.actual_delay_min }} min →
+                {% if alarm.last_check.failsafe_triggered %}
+                    <span style="color:#D62828;font-weight:800;">DŘÍVĚJŠÍ SPOJ ({{ alarm.safe_wake_time }})</span>
+                {% else %}
+                    <span style="color:#2DC653;font-weight:800;">STANDARDNÍ ({{ alarm.base_wake_time }})</span>
+                {% endif %}
+            {% else %}
+                <span style="color:#D62828;font-weight:800;">API NEDOSTUPNÉ → DŘÍVĚJŠÍ SPOJ ({{ alarm.safe_wake_time }})</span>
+            {% endif %}
+            <span style="opacity:0.6;"> {{ alarm.last_check.check_time }}</span>
+        </div>
+        {% endif %}
+
         {% if alarm.stats and alarm.stats.total_checks > 0 %}
         <div class="stats-bar">
             <strong>STATISTIKY (14 DNÍ):</strong>
             {{ alarm.stats.total_checks }} měření |
             Průměr: {{ alarm.stats.avg_delay }} min |
             Max: {{ alarm.stats.max_delay }} min |
-            <span class="stats-highlight">Zpoždění &gt;5 min: {{ alarm.stats.pct_over_5 }}%</span> |
-            <span class="stats-highlight">Zpoždění &gt;10 min: {{ alarm.stats.pct_over_10 }}%</span>
-        </div>
-        {% else %}
-        <div class="stats-bar">
-            <strong>STATISTIKY:</strong> Zatím žádná data
+            <span style="color:#D62828;font-weight:800;">Zpoždění nad 5 min: {{ alarm.stats.pct_over_5 }}%</span> |
+            <span style="color:#D62828;font-weight:800;">Zpoždění nad 10 min: {{ alarm.stats.pct_over_10 }}%</span>
         </div>
         {% endif %}
 
         <div class="alarm-actions">
             <a href="{{ url_for('alarm_edit', alarm_id=alarm.id) }}" class="btn btn-sm">Upravit</a>
+            <form method="POST" action="{{ url_for('alarm_check', alarm_id=alarm.id) }}" style="display:inline;">
+                <button type="submit" class="btn btn-sm btn-primary">Zkontrolovat teď</button>
+            </form>
             <form method="POST" action="{{ url_for('alarm_toggle', alarm_id=alarm.id) }}" style="display:inline;">
                 <button type="submit" class="btn btn-sm">
                     {{ 'Zapnout' if not alarm.is_active else 'Vypnout' }}

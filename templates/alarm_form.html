@@ -31,25 +31,33 @@
         </div>
     </div>
 
-    <div class="form-group">
-        <label>Čas buzení</label>
-        <input type="time" name="base_wake_time" value="{{ alarm.base_wake_time if alarm else '' }}" required>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:12px;margin-top:6px;opacity:0.6;">
-            Failsafe se nastaví automaticky na {{ config.FAILSAFE_OFFSET_MINUTES }} min dříve (config.py)
+    <div class="form-row">
+        <div class="form-group">
+            <label>Čas buzení (standardní)</label>
+            <input type="time" name="base_wake_time" value="{{ alarm.base_wake_time if alarm else '' }}" required>
+            <div class="field-hint">Pokud vlak jede v pořádku</div>
+        </div>
+        <div class="form-group">
+            <label>Čas buzení (dřívější spoj)</label>
+            <input type="time" name="safe_wake_time" value="{{ alarm.safe_wake_time if alarm else '' }}" required>
+            <div class="field-hint">Failsafe – při zpoždění nebo výpadku API</div>
         </div>
     </div>
 
     <div class="form-row">
         <div class="form-group">
-            <label>Čas na přípravu (minuty)</label>
-            <input type="number" name="prep_minutes" value="{{ alarm.prep_minutes if alarm else 30 }}" min="1" max="120" required>
+            <label>Tolerované zpoždění (minuty)</label>
+            <input type="number" name="delay_tolerance_minutes"
+                   value="{{ alarm.delay_tolerance_minutes if alarm else 0 }}"
+                   min="0" max="60" required>
+            <div class="field-hint">Zpoždění vetší než tato hodnota = failsafe</div>
         </div>
         <div class="form-group">
-            <label>Tolerované zpoždění (minuty)</label>
-            <input type="number" name="delay_tolerance_minutes" value="{{ alarm.delay_tolerance_minutes if alarm else 5 }}" min="0" max="60" required>
-            <div style="font-family:'JetBrains Mono',monospace;font-size:12px;margin-top:6px;opacity:0.6;">
-                Při větším zpoždění zavoníš dříve (failsafe)
-            </div>
+            <label>Kontrola zpoždění (min před dřívějším buzením)</label>
+            <input type="number" name="check_before_minutes"
+                   value="{{ alarm.check_before_minutes if alarm else 5 }}"
+                   min="1" max="60" required>
+            <div class="field-hint">Např. 5 min před 06:50 = kontrola v 06:45</div>
         </div>
     </div>
 

@@ -378,6 +378,15 @@ body {
     margin-bottom: 16px;
 }
 
+/* --- Field Hint --- */
+
+.field-hint {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    margin-top: 6px;
+    opacity: 0.6;
+}
+
 /* --- Section Title --- */
 
 .section-title {
